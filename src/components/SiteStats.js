@@ -3,19 +3,10 @@ import useVisitorStats from "../hooks/useVisitorStats";
 import "../new-styles.css";
 
 const SiteStats = () => {
-  const { liveVisitors, totalVisitors, isLoading, hasError } = useVisitorStats();
+  const { liveVisitors, totalVisitors, isLoading } = useVisitorStats();
 
-  const liveVisitorsLabel = hasError
-    ? "Unavailable"
-    : isLoading
-      ? "Loading..."
-      : liveVisitors ?? "Unavailable";
-
-  const totalVisitorsLabel = hasError
-    ? "Unavailable"
-    : isLoading
-      ? "Loading..."
-      : totalVisitors ?? "Unavailable";
+  const liveVisitorsLabel = isLoading ? "..." : liveVisitors;
+  const totalVisitorsLabel = isLoading ? "..." : totalVisitors;
 
   return (
     <div className="site-stats-badge">

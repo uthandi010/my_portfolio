@@ -1,168 +1,72 @@
 import { useEffect, useState } from "react";
 
-const API_BASE = "https://api.countapi.xyz";
-const NAMESPACE = "uthandi-portfolio";
-const TOTAL_VISITS_KEY = "total-visits";
-const LIVE_VIEWERS_KEY = "live-viewers";
+const STATS_KEY = "portfolio-stats";
 const SESSION_VISIT_KEY = "portfolio-visit-recorded";
-const SESSION_LIVE_KEY = "portfolio-live-registered";
 
-const buildUrl = (path) => `${API_BASE}/${path}`;
-
-const fetchCounter = async (path, options) => {
-  const response = await fetch(buildUrl(path), options);
-
-  if (!response.ok) {
-    throw new Error(`Counter request failed: ${response.status}`);
-  }
-
-  return response.json();
-};
-
-const ensureLiveCounter = async () => {
-  const params = new URLSearchParams({
-    namespace: NAMESPACE,
-    key: LIVE_VIEWERS_KEY,
-    value: "0",
-    update_lowerbound: "-1",
-    update_upperbound: "1",
-  });
-
+// Local storage functions
+const getStats = () => {
   try {
-    await fetchCounter(`create?${params.toString()}`);
+    const stored = localStorage.getItem(STATS_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
   } catch (error) {
-    // Ignore "already exists" and transient network issues here.
+    console.warn('Failed to read stats from localStorage:', error);
   }
+  // Initialize with default values
+  return { totalVisitors: 0, liveVisitors: 1 };
 };
 
-const readCounter = async (key) => {
-  const result = await fetchCounter(`get/${NAMESPACE}/${key}`);
-  return typeof result.value === "number" ? result.value : null;
-};
-
-const updateCounter = async (key, amount, keepalive = false) => {
-  const result = await fetchCounter(
-    `update/${NAMESPACE}/${key}?amount=${amount}`,
-    keepalive ? { keepalive: true } : undefined
-  );
-  return typeof result.value === "number" ? result.value : null;
-};
-
-const hitCounter = async (key) => {
-  const result = await fetchCounter(`hit/${NAMESPACE}/${key}`);
-  return typeof result.value === "number" ? result.value : null;
+const saveStats = (stats) => {
+  try {
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  } catch (error) {
+    console.warn('Failed to save stats to localStorage:', error);
+  }
 };
 
 export const useVisitorStats = () => {
-  const [stats, setStats] = useState({
-    liveVisitors: null,
-    totalVisitors: null,
+  const [stats, setReactStats] = useState({
+    liveVisitors: 1,
+    totalVisitors: 0,
     isLoading: true,
-    hasError: false,
   });
 
   useEffect(() => {
     let isMounted = true;
-    let pollIntervalId;
 
     const updateState = (nextState) => {
       if (!isMounted) {
         return;
       }
-
-      setStats((currentState) => ({ ...currentState, ...nextState }));
+      setReactStats((currentState) => ({ ...currentState, ...nextState }));
     };
 
-    const refreshCounters = async () => {
-      try {
-        const [liveVisitors, totalVisitors] = await Promise.all([
-          readCounter(LIVE_VIEWERS_KEY),
-          readCounter(TOTAL_VISITS_KEY),
-        ]);
+    const initializeCounters = () => {
+      // Get current stats from localStorage
+      const currentStats = getStats();
+      let currentTotal = currentStats.totalVisitors;
 
-        updateState({
-          liveVisitors,
-          totalVisitors,
-          isLoading: false,
-          hasError: false,
-        });
-      } catch (error) {
-        updateState({
-          isLoading: false,
-          hasError: true,
-        });
-      }
-    };
-
-    const initializeCounters = async () => {
-      try {
-        await ensureLiveCounter();
-
-        let totalVisitors = null;
-        let liveVisitors = null;
-
-        if (!sessionStorage.getItem(SESSION_VISIT_KEY)) {
-          totalVisitors = await hitCounter(TOTAL_VISITS_KEY);
-          sessionStorage.setItem(SESSION_VISIT_KEY, "1");
-        }
-
-        if (!sessionStorage.getItem(SESSION_LIVE_KEY)) {
-          liveVisitors = await updateCounter(LIVE_VIEWERS_KEY, 1);
-          sessionStorage.setItem(SESSION_LIVE_KEY, "1");
-        }
-
-        if (totalVisitors === null || liveVisitors === null) {
-          const [liveCount, totalCount] = await Promise.all([
-            liveVisitors === null ? readCounter(LIVE_VIEWERS_KEY) : liveVisitors,
-            totalVisitors === null ? readCounter(TOTAL_VISITS_KEY) : totalVisitors,
-          ]);
-
-          updateState({
-            liveVisitors: liveVisitors === null ? liveCount : liveVisitors,
-            totalVisitors: totalVisitors === null ? totalCount : totalVisitors,
-            isLoading: false,
-            hasError: false,
-          });
-        } else {
-          updateState({
-            liveVisitors,
-            totalVisitors,
-            isLoading: false,
-            hasError: false,
-          });
-        }
-
-        pollIntervalId = window.setInterval(refreshCounters, 15000);
-      } catch (error) {
-        updateState({
-          isLoading: false,
-          hasError: true,
-        });
-      }
-    };
-
-    const handlePageHide = () => {
-      if (sessionStorage.getItem(SESSION_LIVE_KEY) !== "1") {
-        return;
+      // Increment total visits for new sessions (unique visits)
+      if (!sessionStorage.getItem(SESSION_VISIT_KEY)) {
+        currentTotal += 1;
+        const updatedStats = { ...currentStats, totalVisitors: currentTotal };
+        saveStats(updatedStats);
+        sessionStorage.setItem(SESSION_VISIT_KEY, "1");
       }
 
-      sessionStorage.removeItem(SESSION_LIVE_KEY);
-      fetch(buildUrl(`update/${NAMESPACE}/${LIVE_VIEWERS_KEY}?amount=-1`), {
-        keepalive: true,
-      }).catch(() => {
-        // Best effort only for page unload.
+      // Update state with final values
+      updateState({
+        liveVisitors: 1, // Always show 1 for current user
+        totalVisitors: currentTotal,
+        isLoading: false,
       });
     };
 
     initializeCounters();
-    window.addEventListener("pagehide", handlePageHide);
 
     return () => {
       isMounted = false;
-      if (pollIntervalId) {
-        window.clearInterval(pollIntervalId);
-      }
-      window.removeEventListener("pagehide", handlePageHide);
     };
   }, []);
 
