@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Github, Linkedin, Sparkles, Code, Terminal, Cpu } from "lucide-react";
+import { ArrowRight, Sparkles, Code, Terminal, Cpu } from "lucide-react";
 import profileImage from "../assets/my_image.jpg";
 import "../fresh-styles.css";
 
